@@ -23,6 +23,7 @@
     "qwen3_worker.py",
     "cordis.patch.yml",
     "scripts/",
+    "docs/",
     "icon.svg",
     "LICENSE",
     "README.md",
