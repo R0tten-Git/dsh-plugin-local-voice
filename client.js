@@ -175,8 +175,22 @@ window.__ModuleLoader__.load({
       silenceMs: 950,
       /** 一段里至少要有多少毫秒人声 */
       minSpeechMs: 400,
-      /** 单段上限，防止一个人滔滔不绝把内存吃光 */
-      maxChunkMs: 9000,
+      /** 硬上限：兜底，正常情况下用不到 */
+      maxChunkMs: 12000,
+      /** 一段超过这么久后，遇到短停顿就切（落在逗号处，不会劈开词组） */
+      midCutAfterMs: 5000,
+      midSilenceMs: 350,
+      /** 句首回卷：触发时把前面这段也带上，避免切掉第一个字 */
+      prerollMs: 400,
+      /** 边说边出：每隔这么久把当前缓冲送一次临时识别 */
+      partialEveryMs: 2200,
+      /** 临时结果最多用多长的音频 */
+      partialWindowMs: 10000,
+      /** 至少说这么久才值得送临时结果 */
+      partialMinMs: 1500,
+      /** 阈值区间：下限防数字静音，但别设太高（实测底噪 0.0005 时 0.008 会吃掉小声） */
+      minThreshold: 0.0035,
+      maxThreshold: 0.03,
       /** 校准环境噪声的时长 */
       calibrateMs: 1200,
     };
@@ -305,7 +319,7 @@ window.__ModuleLoader__.load({
       const { useCallback, useEffect, useRef, useState } = React;
 
       /** 开始一段录音：麦克风 → 16k → 能量切句 → 回调。 */
-      async function openSession({ onChunk, onThreshold, onLevel, onError }) {
+      async function openSession({ onChunk, onPartial, onThreshold, onLevel, onError }) {
         if (navigator.mediaDevices?.getUserMedia === undefined) {
           throw new Error('当前环境不支持麦克风采集');
         }
@@ -326,6 +340,8 @@ window.__ModuleLoader__.load({
 
         const state = {
           threshold: null,
+          noiseFloor: 0,
+          trackedMs: 0,
           calibrating: [],
           calibrateMs: 0,
           speaking: false,
@@ -333,7 +349,12 @@ window.__ModuleLoader__.load({
           voicedMs: 0,
           silenceMs: 0,
           chunkMs: 0,
+          prerollMuteUntil: 0,
+          lastPartialAt: 0,
         };
+        /** 只在"没在说话"时维护的环形缓冲 */
+        const preroll = [];
+        const prerollMax = Math.max(1, Math.ceil(LIVE.prerollMs / 256));
 
         const flush = () => {
           const frames = state.frames;
@@ -371,7 +392,8 @@ window.__ModuleLoader__.load({
                 // 用中位数会被偶发噪声抬高，之前就顶到了 0.05 把小声说话全漏了。
                 const sorted = state.calibrating.slice().sort((a, b) => a - b);
                 const floor = sorted[Math.floor(sorted.length * 0.2)] ?? 0;
-                state.threshold = Math.min(0.03, Math.max(0.008, floor * 3.5));
+                state.threshold = Math.min(LIVE.maxThreshold, Math.max(LIVE.minThreshold, floor * 3.5));
+                state.noiseFloor = Math.max(floor, 0.0005);
                 onThreshold?.(state.threshold);
               }
               return;
@@ -379,9 +401,28 @@ window.__ModuleLoader__.load({
 
             const voiced = level >= state.threshold;
             if (!state.speaking) {
-              if (!voiced) return;
+              if (!voiced) {
+                // 只在静音帧上估计噪声，所以有人连续说话时阈值不会被抬高
+                state.noiseFloor = state.noiseFloor * 0.9 + level * 0.1;
+                state.trackedMs += ms;
+                if (state.trackedMs >= 1000) {
+                  state.trackedMs = 0;
+                  const target = Math.min(
+                    LIVE.maxThreshold,
+                    Math.max(LIVE.minThreshold, state.noiseFloor * 3.5),
+                  );
+                  state.threshold += (target - state.threshold) * 0.2;
+                  onThreshold?.(state.threshold);
+                }
+                preroll.push(block);
+                if (preroll.length > prerollMax) preroll.shift();
+                return;
+              }
               state.speaking = true;
-              state.frames = [block];
+              // 刚被强制切过：不回卷，否则上一段的尾巴会被重听一遍
+              const carry = Date.now() >= state.prerollMuteUntil ? [...preroll] : [];
+              state.frames = [...carry, block];
+              preroll.length = 0;
               state.voicedMs = ms;
               state.silenceMs = 0;
               state.chunkMs = ms;
@@ -397,8 +438,36 @@ window.__ModuleLoader__.load({
               state.silenceMs += ms;
             }
 
-            if (state.silenceMs >= LIVE.silenceMs && state.voicedMs >= LIVE.minSpeechMs) flush();
-            else if (state.chunkMs >= LIVE.maxChunkMs) flush();
+            // 边说边出：不影响正式切句，只是先把"当前听到的"显示出来
+            const now = Date.now();
+            if (
+              onPartial !== undefined &&
+              state.chunkMs >= LIVE.partialMinMs &&
+              now - state.lastPartialAt >= LIVE.partialEveryMs
+            ) {
+              state.lastPartialAt = now;
+              const windowFrames = Math.min(
+                state.frames.length,
+                Math.max(1, Math.floor(LIVE.partialWindowMs / 256)),
+              );
+              onPartial(concatFrames(state.frames.slice(-windowFrames)));
+            }
+
+            const longEnough = state.voicedMs >= LIVE.minSpeechMs;
+            if (state.silenceMs >= LIVE.silenceMs && longEnough) {
+              flush();
+            } else if (
+              state.chunkMs >= LIVE.midCutAfterMs &&
+              state.silenceMs >= LIVE.midSilenceMs &&
+              longEnough
+            ) {
+              // 话说得太长：趁一个换气的短停顿切
+              state.prerollMuteUntil = Date.now() + 600;
+              flush();
+            } else if (state.chunkMs >= LIVE.maxChunkMs) {
+              state.prerollMuteUntil = Date.now() + 600;
+              flush();
+            }
           } catch (error) {
             onError(error instanceof Error ? error : new Error(String(error)));
           }
@@ -439,6 +508,8 @@ window.__ModuleLoader__.load({
         const [phase, setPhase] = useState('idle');
         const [confirmEnd, setConfirmEnd] = useState(false);
         const [lines, setLines] = useState([]);
+        /** 说话过程中的临时结果（灰色斜体，定稿后替换） */
+        const [partial, setPartial] = useState('');
         const [pending, setPending] = useState(0);
         const [elapsed, setElapsed] = useState(0);
         const [message, setMessage] = useState('');
@@ -455,21 +526,64 @@ window.__ModuleLoader__.load({
         const scrollerRef = useRef(undefined);
         const confirmTimer = useRef(undefined);
 
+        /** 按模型自带的标点拆句：一个音频块可能有 12 秒、好几句话。 */
+        function splitSentences(text) {
+          const parts = text.split(/(?<=[。！？!?])/u).map((part) => part.trim()).filter(Boolean);
+          return parts.length > 0 ? parts : [text];
+        }
+
         const append = useCallback((line) => {
-          const previous = linesRef.current[linesRef.current.length - 1];
+          const sentences = splitSentences(line.text);
+          if (sentences.length === 0) return;
+          let queue = linesRef.current;
+
+          // 先让第一句尝试接力上一行（避免"…九点半睡。" + "睡觉。"这种断裂）
+          const previous = queue[queue.length - 1];
           if (previous !== undefined) {
-            const merged = mergeFragment(previous.text, line.text);
+            const merged = mergeFragment(previous.text, sentences[0]);
             if (merged !== undefined) {
-              // 同一句被切开：接回上一行，保留上一行的时间戳
-              const updated = [...linesRef.current.slice(0, -1), { ...previous, text: merged }];
-              linesRef.current = updated;
-              setLines(updated);
-              return;
+              queue = [...queue.slice(0, -1), { ...previous, text: merged }];
+              sentences.shift();
             }
           }
-          linesRef.current = [...linesRef.current, line];
-          setLines(linesRef.current);
+
+          for (const sentence of sentences) {
+            queue = [...queue, { id: `${Date.now()}-${Math.random()}`, ts: line.ts, text: sentence }];
+          }
+          linesRef.current = queue;
+          setLines(queue);
         }, []);
+
+        /** 临时结果：跑得慢就跳过这一轮，绝不拖累定稿。 */
+        const partialBusyRef = useRef(false);
+        const transcribePartial = useCallback(
+          (samples) => {
+            if (partialBusyRef.current) return;
+            partialBusyRef.current = true;
+            void (async () => {
+              try {
+                const speech = ctx.remote?.speech;
+                if (speech === undefined || typeof speech.transcribe !== 'function') return;
+                const wav = encodeWav(samples, LIVE.sampleRate);
+                const envelope = await speech.transcribe({
+                  audioBase64: toBase64(wav),
+                  language: 'auto',
+                });
+                const unwrapped =
+                  envelope !== null && typeof envelope === 'object' && 'ok' in envelope
+                    ? envelope
+                    : { ok: true, value: envelope };
+                if (unwrapped.ok !== true) return;
+                setPartial((unwrapped.value?.text ?? '').trim());
+              } catch {
+                /* 临时结果失败不影响正式链路 */
+              } finally {
+                partialBusyRef.current = false;
+              }
+            })();
+          },
+          [],
+        );
 
         /** 逐段送识别；串行排队，避免并发把 worker 挤爆。 */
         const transcribe = useCallback(
@@ -510,6 +624,7 @@ window.__ModuleLoader__.load({
                   lastChars: text.length,
                   empty: text === '' ? s.empty + 1 : s.empty,
                 }));
+                setPartial('');
                 if (text === '') return;
                 append({ id: `${Date.now()}-${Math.random()}`, ts: clockText(new Date()), text });
               })
@@ -531,6 +646,7 @@ window.__ModuleLoader__.load({
             if (reset === true) {
               linesRef.current = [];
               setLines([]);
+              setPartial('');
               setStats({ chunks: 0, empty: 0, lastMs: 0, bytes: 0, lastChars: -1 });
               setThreshold(0);
               setLevel(0);
@@ -541,6 +657,7 @@ window.__ModuleLoader__.load({
             try {
               const session = await openSession({
                 onChunk: (samples) => transcribe(samples),
+                onPartial: (samples) => transcribePartial(samples),
                 onThreshold: (value) => setThreshold(value),
                 onLevel: (value) => {
                   setLevel(value);
@@ -561,6 +678,7 @@ window.__ModuleLoader__.load({
 
         /** 暂停：停止采集但保留已转内容，下次继续往后追加。 */
         const pause = useCallback(() => {
+          setPartial('');
           if (sessionRef.current !== undefined) {
             sessionRef.current.stop();
             sessionRef.current = undefined;
@@ -589,6 +707,7 @@ window.__ModuleLoader__.load({
           sessionRef.current = undefined;
           linesRef.current = [];
           setLines([]);
+          setPartial('');
           setStats({ chunks: 0, empty: 0, lastMs: 0, bytes: 0, lastChars: -1 });
           setThreshold(0);
           setLevel(0);
@@ -767,6 +886,7 @@ window.__ModuleLoader__.load({
 .dsh-live-stt__footActions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; opacity: .9; }
 .dsh-live-stt__footActions .dsh-live-stt__btn { font-size: 11px; padding: 1px 6px; }
 .dsh-live-stt__placeholder { opacity: .45; font-size: 12px; padding: 6px 0; }
+.dsh-live-stt__partial { opacity: .5; font-style: italic; }
 .dsh-live-stt__dot { color: #e5484d; font-size: 10px; }
 @keyframes dsh-live-stt-blink { 50% { opacity: .25; } }
 .dsh-live-stt__dot--live { animation: dsh-live-stt-blink 1.1s ease-in-out infinite; }
@@ -865,11 +985,22 @@ window.__ModuleLoader__.load({
             )),
         ].filter((item) => item !== undefined);
 
+        /** 说话中的临时行：灰色斜体，定稿后由 lines 替代 */
+        const partialLine =
+          partial === ''
+            ? undefined
+            : h(
+                'div',
+                { className: 'dsh-live-stt__partial' },
+                h('span', { style: { opacity: 0.45, marginRight: 6 } }, clockText(new Date())),
+                partial,
+              );
+
         const body =
-          lines.length === 0
+          lines.length === 0 && partial === ''
             ? h('div', { className: 'dsh-live-stt__placeholder' },
                 phase === 'recording'
-                  ? '正在听…（说完一句停 0.7 秒就会出一行）'
+                  ? '正在听…（说完一句停 0.8 秒就会出一行）'
                   : '点上面的播放键开始')
             : h(
                 'div',
@@ -882,6 +1013,7 @@ window.__ModuleLoader__.load({
                     line.text,
                   ),
                 ),
+                partialLine,
               );
 
         const foot = [
