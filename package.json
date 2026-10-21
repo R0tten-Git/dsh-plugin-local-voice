@@ -1,5 +1,5 @@
 {
-  "name": "dsh-plugin-voice-input",
+  "name": "dsh-plugin-local-voice",
   "version": "1.5.0",
   "private": false,
   "description": "Local real-time speech-to-text for DeepSeek Harness: a floating transcription panel plus a Qwen3-ASR recognizer provider (Apple Silicon). Fully offline.",

@@ -13,7 +13,7 @@
  *     so this path stays silent whenever path 1 worked.
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-plugin-voice-input',
+  id: 'dsh-plugin-local-voice',
   factory(require) {
     /** Dictionary namespace for this command. */
     const NS = 'voice-shortcut';

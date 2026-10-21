@@ -19,7 +19,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** Loader identity for this plugin row. */
-export const name = 'dsh-plugin-voice-input'
+export const name = 'dsh-plugin-local-voice'
 /** The speech registry must exist before this plugin can register a recognizer. */
 export const inject = ['speechToText', 'llm']
 

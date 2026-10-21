@@ -8,4 +8,4 @@
     language: auto
 - insert:
     - id: voice-input
-      name: 'dsh-plugin-voice-input'
+      name: 'dsh-plugin-local-voice'

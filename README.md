@@ -1,4 +1,4 @@
-# dsh-plugin-voice-input
+# dsh-plugin-local-voice
 
 在 DeepSeek Harness 里做**本地实时语音转写**：右下角一个浮窗，边说边出字，可存成 markdown 纪要。识别引擎是本机的 **Qwen3-ASR-1.7B-8bit（MLX）**，音频不出机器。
 
@@ -13,13 +13,13 @@
 **方式一：CLI 一键装（已发布到 npm 后可用）**
 
 ```bash
-dsh plugin --profile desktop add dsh-plugin-voice-input
+dsh plugin --profile desktop add dsh-plugin-local-voice
 ```
 
 **方式二：从源码装**
 
 ```bash
-dsh plugin --profile desktop add github:<owner>/dsh-plugin-voice-input
+dsh plugin --profile desktop add github:<owner>/dsh-plugin-local-voice
 ```
 
 **方式三：插件页**

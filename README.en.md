@@ -1,4 +1,4 @@
-# dsh-plugin-voice-input
+# dsh-plugin-local-voice
 
 Real-time speech-to-text inside DeepSeek Harness: a floating transcription panel that writes
 each sentence as you speak, plus a local **Qwen3-ASR** recognizer registered into the shipped
