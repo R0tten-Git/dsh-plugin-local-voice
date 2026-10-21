@@ -1,0 +1,19 @@
+# dependencies / build artifacts
+node_modules/
+*.tgz
+package-lock.json
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# local model caches (never commit weights)
+models/
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
