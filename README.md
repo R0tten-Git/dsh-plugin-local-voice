@@ -44,8 +44,10 @@ python3 scripts/prepare_model.py
 | 平台 | 浮窗 UI | Qwen3 引擎 | 说明 |
 |---|---|---|---|
 | macOS Apple Silicon | ✅ | ✅ | 推荐，中文效果最好 |
-| Windows / Linux | ✅ | ❌ | 回落到官方 SenseVoice，UI 照常可用 |
+| Windows / Linux | ✅ | ❌ | Qwen3 不注册，自动回落官方 SenseVoice，UI 照常可用 |
 | Web 客户端 | ✅ | 取决于 Host | 模型跑在 Host 上 |
+
+插件启动时自动探测**平台（darwin/arm64）+ Python 解释器 + 模型目录**，三者任一不满足就**不注册** Qwen3 识别器，也不去改默认识别器——所以你看到的是 SenseVoice 正常工作，而不是一个坏掉的麦克风。
 
 ## 使用
 

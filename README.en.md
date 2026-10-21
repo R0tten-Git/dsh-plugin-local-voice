@@ -24,6 +24,10 @@ speech service.
 On other platforms the panel still loads, but the Qwen3 recognizer is **not** registered — the
 shipped SenseVoice recognizer stays in charge.
 
+The plugin probes **platform (darwin/arm64), the Python interpreter and the model directory** at
+startup. If any of them is missing it registers nothing and leaves the default recognizer alone,
+so the shipped voice input keeps working instead of pointing at an engine that cannot start.
+
 ## Install
 
 1. Install it:

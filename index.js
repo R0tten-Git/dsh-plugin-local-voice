@@ -45,6 +45,27 @@ const PREPARE = fileURLToPath(new URL('./scripts/prepare_model.py', import.meta.
  */
 const MODEL_SOURCE = process.env.LIVE_STT_MODEL_SOURCE ?? 'modelscope'
 
+/**
+ * 判断本机能不能跑 Qwen3 引擎。
+ *
+ * 不满足条件时**不注册 provider**，让官方的 SenseVoice 继续做默认识别器——
+ * 否则会出现"识别器指向一个跑不起来的实现"，把本来能用的语音输入弄坏。
+ *
+ * @returns 不可用的原因；可用时返回 undefined。
+ */
+function unavailableReason() {
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') {
+    return `当前平台 ${process.platform}/${process.arch} 没有 MLX 运行时`
+  }
+  if (!existsSync(PYTHON)) {
+    return `找不到解释器 ${PYTHON}（可用 LIVE_STT_PYTHON 指定）`
+  }
+  if (!existsSync(MODEL)) {
+    return `找不到模型 ${MODEL}（先跑 scripts/prepare_model.py）`
+  }
+  return undefined
+}
+
 /** Model load happens on first use; leave plenty of room for a cold disk. */
 const READY_TIMEOUT_MS = 180_000
 /** One utterance; the service's own inference timeout is 120s. */
@@ -460,12 +481,14 @@ export function apply(ctx) {
     typeof ctx.logger === 'function' ? ctx.logger('qwen3-asr') : ctx.logger
   const worker = new Qwen3Worker(logger)
 
-  if (!existsSync(MODEL)) {
+  const blocked = unavailableReason()
+  if (blocked !== undefined) {
     worker.warn(
-      `模型目录不存在：${MODEL}\n` +
-        `  准备模型：python3 "${PREPARE}" --source ${MODEL_SOURCE}\n` +
-        `  （国内默认魔搭；海外可加 --source hf；也可用 LIVE_STT_MODEL 指到已有目录）`,
+      `Qwen3 识别器不注册：${blocked}\n` +
+        `  → 继续使用官方 SenseVoice，浮窗与内置麦克风照常可用\n` +
+        `  → 想启用 Qwen3（macOS Apple Silicon）：python3 "${PREPARE}" --source ${MODEL_SOURCE}`,
     )
+    return
   }
 
   ctx.effect(() => {

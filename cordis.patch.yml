@@ -1,11 +1,10 @@
-# 把内置语音输入的默认识别器换成本机的 Qwen3-ASR（由本包 Host 半部注册）
-# 这一层在 @deepseek-ai/dsh-experimental-voice-input-bundle 之后应用，所以能覆盖它写下的
-# defaultProvider: sensevoice-local。language 用 auto（Qwen3 自己判语言，中文仍最准）。
-- id: speech-to-text
-  name: '@deepseek-ai/dsh-experimental-speech-to-text'
-  config:
-    defaultProvider: qwen3-asr-local
-    language: auto
+# 只插入插件行；**不在这里改默认识别器**。
+#
+# 为什么不在 YAML 里写 defaultProvider：这台机器未必跑得动 Qwen3（非 Apple Silicon、
+# 缺 python 环境、缺模型）。写死的话，那些机器上识别器会指向一个跑不起来的实现，
+# 把官方本来能用的 SenseVoice 弄坏。
+#
+# 正确做法：index.js 探测通过、注册成功后，再用服务自己的 configure() 切过去。
 - insert:
     - id: voice-input
       name: 'dsh-plugin-local-voice'
