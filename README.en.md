@@ -8,6 +8,10 @@ speech service.
 - **Engine**: Qwen3-ASR-1.7B-8bit via MLX, loaded once, kept warm, reclaimed after idle.
 - **Offline**: audio never leaves the machine; no cloud calls by default.
 
+![Live transcription panel](docs/screenshot.png)
+
+<sub>Speak, pause for 0.95 s, get a line. Pause or minimize while it keeps recording; copy the transcript or save it as markdown.</sub>
+
 ## Requirements
 
 | Item | Requirement |

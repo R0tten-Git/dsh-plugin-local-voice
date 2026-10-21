@@ -4,6 +4,10 @@
 
 > [English](README.en.md) | 简体中文
 
+![实时转写浮窗](docs/screenshot.png)
+
+<sub>边说边出字：每句停 0.95 秒后出一行，可暂停/最小化继续录，可复制或存成 markdown。</sub>
+
 ## 安装
 
 **方式一：CLI 一键装（已发布到 npm 后可用）**
