@@ -33,10 +33,11 @@ so the shipped voice input keeps working instead of pointing at an engine that c
 1. Install it:
 
 ```bash
-dsh plugin --profile desktop add github:R0tten-Git/dsh-plugin-local-voice
+dsh plugin --profile desktop add dsh-plugin-local-voice
 ```
 
-   or, from the plugin page, **Add plugin** → point at this package directory (or the `.tgz`).
+   or track the latest commit: `dsh plugin --profile desktop add github:R0tten-Git/dsh-plugin-local-voice`,
+   or from the plugin page **Add plugin** → point at this package directory (or the `.tgz`).
 2. Prepare the engine (macOS):
 
 ```bash
