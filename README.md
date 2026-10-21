@@ -10,21 +10,21 @@
 
 ## 安装
 
-**方式一：CLI 一键装（已发布到 npm 后可用）**
+**方式一：直接从 GitHub 装（推荐，无需等待 npm）**
+
+```bash
+dsh plugin --profile desktop add github:R0tten-Git/dsh-plugin-local-voice
+```
+
+**方式二：插件页**
+
+插件页 → **添加插件** → 指向本目录（或 `.tgz`）→ 安装 → 立即启用。
+
+**方式三：npm（尚未发布，发布后可用）**
 
 ```bash
 dsh plugin --profile desktop add dsh-plugin-local-voice
 ```
-
-**方式二：从源码装**
-
-```bash
-dsh plugin --profile desktop add github:<owner>/dsh-plugin-local-voice
-```
-
-**方式三：插件页**
-
-插件页 → **添加插件** → 指向本目录（或 `.tgz`）→ 安装 → 立即启用。
 
 装完还要准备引擎（macOS Apple Silicon）：
 

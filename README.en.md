@@ -26,7 +26,13 @@ shipped SenseVoice recognizer stays in charge.
 
 ## Install
 
-1. Plugin page → **Add plugin** → point at this package directory (or the `.tgz`) → install → enable.
+1. Install it:
+
+```bash
+dsh plugin --profile desktop add github:R0tten-Git/dsh-plugin-local-voice
+```
+
+   or, from the plugin page, **Add plugin** → point at this package directory (or the `.tgz`).
 2. Prepare the engine (macOS):
 
 ```bash
