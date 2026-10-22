@@ -197,17 +197,26 @@ export class Qwen3Worker {
       child.stdout.setEncoding('utf8')
       child.stdout.on('data', (chunk) => this.receive(chunk))
       child.stderr.setEncoding('utf8')
+      /** 保留最后几行 stderr，worker 意外退出时才能说明原因 */
+      const stderrTail = []
       child.stderr.on('data', (chunk) => {
         for (const line of String(chunk).split('\n')) {
-          if (line.trim() !== '') this.info(line.trim())
+          const text = line.trim()
+          if (text === '') continue
+          stderrTail.push(text)
+          if (stderrTail.length > 8) stderrTail.shift()
+          this.info(text)
         }
       })
       child.on('error', (error) => settle(error))
       child.on('exit', (code, signal) => {
-        this.failAll(new Error(`Qwen3 worker 已退出（code=${code}, signal=${signal}）`))
-        if (!settled) settle(new Error(`Qwen3 worker 退出（code=${code}）`))
+        const tail = stderrTail.length > 0 ? `：${stderrTail[stderrTail.length - 1]}` : ''
+        this.failAll(new Error(`Qwen3 worker 已退出（code=${code}, signal=${signal}${tail}）`))
+        if (!settled) settle(new Error(`Qwen3 worker 退出（code=${code}${tail}）`))
+        this.info(`worker 退出 code=${code} signal=${signal}${tail}`)
         this.child = undefined
         this.starting = undefined
+        this.ready = false
       })
     })
   }
